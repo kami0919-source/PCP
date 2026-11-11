@@ -1,0 +1,21 @@
+{
+  "name": "proposal-ops-local",
+  "version": "1.0.0",
+  "private": true,
+  "description": "提案導航台本機版",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "serve": "node scripts/serve.mjs",
+    "test": "node --test scripts/*.test.mjs",
+    "supabase:bootstrap": "node scripts/bootstrap-supabase.mjs",
+    "supabase:verify": "node scripts/verify-supabase.mjs",
+    "import:preview": "node scripts/import-backup.mjs proposal-ops-backup-2026-09-24T03-59-24-145Z.json"
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1"
+  }
+}
