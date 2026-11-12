@@ -3004,32 +3004,35 @@
           aiPhase.querySelector("[role=progressbar]")?.setAttribute("aria-valuenow", String(normalizedStage));
         };
         fileInput.onchange = () => {
-          const files = Array.from(fileInput.files || []);
+          const addedFiles = Array.from(fileInput.files || []);
+          const currentFiles = pendingRequirementFiles.get(c.id) || [];
           errorBox.textContent = "";
-          if (!files.length) {
-            pendingRequirementFiles.delete(c.id);
-            $("#selectedRequirementFile").textContent = "尚未選擇檔案";
-            renderTransferQueue([]);
-            return;
-          }
+          fileInput.value = "";
+          if (!addedFiles.length) return;
+          const fingerprints = new Set(currentFiles.map(file => `${file.name}\u0000${file.size}\u0000${file.lastModified}`));
+          const uniqueFiles = addedFiles.filter(file => {
+            const fingerprint = `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
+            if (fingerprints.has(fingerprint)) return false;
+            fingerprints.add(fingerprint);
+            return true;
+          });
+          const files = [...currentFiles, ...uniqueFiles];
           if (files.length > MAX_FILES_PER_ANALYSIS) {
             fileInput.value = "";
-            pendingRequirementFiles.delete(c.id);
-            $("#selectedRequirementFile").textContent = "尚未選擇檔案";
-            renderTransferQueue([]);
-            errorBox.textContent = "一次最多選擇 10 份文件。";
+            errorBox.textContent = `目前已有 ${currentFiles.length} 份待上傳文件；單次分析最多選擇 10 份。`;
             return;
           }
           if (files.some(file => file.size > MAX_FILE_BYTES) || files.some(file => /\.(?:jpe?g|png)$/i.test(file.name) && file.size > MAX_IMAGE_BYTES) || files.reduce((sum, file) => sum + file.size, 0) > MAX_BATCH_BYTES) {
             fileInput.value = "";
-            pendingRequirementFiles.delete(c.id);
-            $("#selectedRequirementFile").textContent = "尚未選擇檔案";
-            renderTransferQueue([]);
             errorBox.textContent = "每份檔案與單次分析合計不可超過 250 MB；JPG／PNG 單檔不可超過 20 MB。";
             return;
           }
+          if (!uniqueFiles.length) {
+            errorBox.textContent = "這份檔案已在待上傳清單中，不會重複加入。";
+            return;
+          }
           pendingRequirementFiles.set(c.id, files);
-          $("#selectedRequirementFile").textContent = `已選擇 ${files.length} 份：${files.map(file => file.name).join("、")}`;
+          $("#selectedRequirementFile").textContent = `待上傳 ${files.length} 份：${files.map(file => file.name).join("、")}`;
           renderTransferQueue(files);
         };
         document.querySelectorAll("[data-requirement-file]").forEach((checkbox) => {
@@ -3962,8 +3965,8 @@
         const a = c.analysis;
         const files = c.requirementFiles || [];
         const pendingFiles = pendingRequirementFiles.get(c.id) || [];
-        const pendingLabel = pendingFiles.length ? `已選擇 ${pendingFiles.length} 份：${pendingFiles.map(file => esc(file.name)).join("、")}` : "尚未選擇檔案";
-        return `<div class="work-panel"><section class="editor-card"><h3>案件需求說明</h3><p>文件上傳後會存放在 Supabase Storage，後續重新分析會直接讀取既有附件，不需要再次上傳。大型 PDF 與 Office 文件會自動拆頁或分段分析；AI 也會辨識 JPG／PNG 圖片中的文字。</p><div class="requirement-upload"><label for="requirementFile">新增需求文件</label><input id="requirementFile" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.md,.jpg,.jpeg,.png"><div class="file-note">支援 PDF、Office、文字、JPG、PNG；每案分析最多 10 份，單檔與合計上限 250 MB（圖片單檔 20 MB）。超過 40 MB 會自動分批分析。</div><div class="file-note" id="selectedRequirementFile">${pendingLabel}</div>${requirementProgressMarkup(pendingFiles)}${files.length ? `<div class="current-files" style="margin-top:10px"><strong>勾選本次分析要使用的已儲存文件：</strong>${files.map(file => `<label class="current-file"><input type="checkbox" data-requirement-file="${file.id}" ${c.selectedRequirementFileIds.includes(file.id) ? "checked" : ""}> 📎 ${esc(file.name)} · ${formatSize(file.size)} · Supabase 已儲存</label>`).join("")}</div>` : ""}</div><label for="sourceText" style="font-weight:800">自行填寫或補充需求</label><textarea class="source-text" id="sourceText" placeholder="請填寫案件背景、公司能力、可提供規格、成本、人力或其他補充資訊……">${esc(c.sourceText)}</textarea><p id="aiStatus" role="status">正在檢查 AI 設定…</p><div id="aiError" role="alert"></div><div class="button-row"><button class="btn primary" id="analyzeBrief">AI 產生可執行性評估</button><button class="btn stop" id="cancelAnalysis" hidden>終止分析</button><button class="btn" id="saveBrief">只儲存文字</button></div></section><section class="result-card"><h3>專案可執行性評估</h3><p>${a ? (a.provider === "openai" ? "AI 分析：" : "舊版規則草稿（非 AI）：") + new Date(a.generatedAt).toLocaleString("zh-TW") : "尚未分析，請上傳文件或填寫需求內容。"}</p><div class="analysis-grid">${a ? renderAnalysis(a) : '<div class="empty-state">分析結果將包含執行判斷、硬性條件、文件檢核、規格對照、待釐清議題、開發工項、時程、風險與評估簡報方案。</div>'}</div></section></div>`;
+        const pendingLabel = pendingFiles.length ? `待上傳 ${pendingFiles.length} 份：${pendingFiles.map(file => esc(file.name)).join("、")}` : "尚未選擇檔案";
+        return `<div class="work-panel"><section class="editor-card"><h3>案件需求說明</h3><p>文件上傳後會存放在 Supabase Storage，後續重新分析會直接讀取既有附件，不需要再次上傳。大型 PDF 與 Office 文件會自動拆頁或分段分析；AI 也會辨識 JPG／PNG 圖片中的文字。</p><div class="requirement-upload"><label for="requirementFile">新增需求文件</label><input id="requirementFile" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.md,.jpg,.jpeg,.png"><div class="file-note">可分次、一個一個選擇檔案，新選擇的文件會追加至待上傳清單，不會覆蓋前次文件。支援 PDF、Office、文字、JPG、PNG；每案分析最多 10 份，單檔與合計上限 250 MB（圖片單檔 20 MB）。超過 40 MB 會自動分批分析。</div><div class="file-note" id="selectedRequirementFile">${pendingLabel}</div>${requirementProgressMarkup(pendingFiles)}${files.length ? `<div class="current-files" style="margin-top:10px"><strong>勾選本次分析要使用的已儲存文件：</strong>${files.map(file => `<label class="current-file"><input type="checkbox" data-requirement-file="${file.id}" ${c.selectedRequirementFileIds.includes(file.id) ? "checked" : ""}> 📎 ${esc(file.name)} · ${formatSize(file.size)} · Supabase 已儲存</label>`).join("")}</div>` : ""}</div><label for="sourceText" style="font-weight:800">自行填寫或補充需求</label><textarea class="source-text" id="sourceText" placeholder="請填寫案件背景、公司能力、可提供規格、成本、人力或其他補充資訊……">${esc(c.sourceText)}</textarea><p id="aiStatus" role="status">正在檢查 AI 設定…</p><div id="aiError" role="alert"></div><div class="button-row"><button class="btn primary" id="analyzeBrief">AI 產生可執行性評估</button><button class="btn stop" id="cancelAnalysis" hidden>終止分析</button><button class="btn" id="saveBrief">只儲存文字</button></div></section><section class="result-card"><h3>專案可執行性評估</h3><p>${a ? (a.provider === "openai" ? "AI 分析：" : "舊版規則草稿（非 AI）：") + new Date(a.generatedAt).toLocaleString("zh-TW") : "尚未分析，請上傳文件或填寫需求內容。"}</p><div class="analysis-grid">${a ? renderAnalysis(a) : '<div class="empty-state">分析結果將包含執行判斷、硬性條件、文件檢核、規格對照、待釐清議題、開發工項、時程、風險與評估簡報方案。</div>'}</div></section></div>`;
       }
       function renderCaseWorkspace() {
         const c = currentCase();
