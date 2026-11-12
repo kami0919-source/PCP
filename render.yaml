@@ -3,7 +3,7 @@ services:
     name: proposal-ops
     runtime: node
     region: singapore
-    plan: starter
+    plan: free
     buildCommand: npm ci
     startCommand: npm start
     healthCheckPath: /api/health
@@ -21,4 +21,4 @@ services:
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
-        value: gpt-4o-mini
+        value: gpt-4.1-mini
